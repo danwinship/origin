@@ -11,7 +11,7 @@ OPENSHIFT_SDN_PLUGIN=${OPENSHIFT_SDN_PLUGIN:-redhat/openshift-ovs-subnet}
 
 NETWORK_CONF_PATH=/etc/sysconfig/network-scripts/
 sed -i 's/^NM_CONTROLLED=no/#NM_CONTROLLED=no/' ${NETWORK_CONF_PATH}ifcfg-eth1
-
+rm -f ${NETWORK_CONF_PATH}ifcfg-enp*
 systemctl restart network
 
 # Setup hosts file to support ping by hostname to each minion in the cluster from apiserver
@@ -30,6 +30,8 @@ if ! grep ${MASTER_IP} /etc/hosts; then
   echo "${MASTER_IP} ${MASTER_NAME}" >> /etc/hosts
 fi
 node_list=${node_list:1}
+
+yum -y install deltarpm
 
 # Install the required packages
 yum install -y docker-io git golang e2fsprogs hg net-tools bridge-utils which

@@ -8,7 +8,7 @@ MINION_INDEX=$5
 
 NETWORK_CONF_PATH=/etc/sysconfig/network-scripts/
 sed -i 's/^NM_CONTROLLED=no/#NM_CONTROLLED=no/' ${NETWORK_CONF_PATH}ifcfg-eth1
-
+rm -f ${NETWORK_CONF_PATH}ifcfg-enp*
 systemctl restart network
 
 # get the minion name, index is 1-based
@@ -33,6 +33,8 @@ done
 if ! grep ${MINION_IP} /etc/hosts; then
   echo "${MINION_IP} ${minion_name}" >> /etc/hosts
 fi
+
+yum -y install deltarpm
 
 # Install the required packages
 yum install -y docker-io git golang e2fsprogs hg openvswitch net-tools bridge-utils which ethtool
