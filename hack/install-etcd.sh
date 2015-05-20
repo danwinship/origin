@@ -21,7 +21,7 @@ etcd_version=$(go run ${OS_ROOT}/hack/version.go ${OS_ROOT}/Godeps/Godeps.json \
 mkdir -p etcd && cd etcd
 
 curl -s -L https://github.com/coreos/etcd/tarball/${etcd_version} | \
-  tar xz --strip-components 1 2>/dev/null
+  tar xz --strip-components 1 --no-same-owner 2>/dev/null
 
 if [ "$?" != "0" ]; then
   echo "Failed to download coreos/etcd." && exit 1
