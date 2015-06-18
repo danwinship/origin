@@ -179,9 +179,13 @@ install -m 0644 tuned/man/tuned-profiles-openshift-node.7 %{buildroot}%{_mandir}
 
 # Install sdn scripts
 install -d -m 0755 %{buildroot}%{kube_plugin_path}
-pushd _thirdpartyhacks/src/%{sdn_import_path}/ovssubnet/bin
+pushd _thirdpartyhacks/src/%{sdn_import_path}/ovssubnet/controller/kube/bin
    install -p -m 755 openshift-ovs-subnet %{buildroot}%{kube_plugin_path}/openshift-ovs-subnet
    install -p -m 755 openshift-sdn-kube-subnet-setup.sh %{buildroot}%{_bindir}/
+popd
+pushd _thirdpartyhacks/src/%{sdn_import_path}/ovssubnet/controller/multitenant/bin
+   install -p -m 755 openshift-ovs-multitenant %{buildroot}%{_bindir}/
+   install -p -m 755 openshift-sdn-multitenant-setup.sh %{buildroot}%{_bindir}/
 popd
 install -d -m 0755 %{buildroot}%{_prefix}/lib/systemd/system/openshift-node.service.d
 install -p -m 0644 rel-eng/openshift-sdn-ovs.conf %{buildroot}%{_prefix}/lib/systemd/system/openshift-node.service.d/
