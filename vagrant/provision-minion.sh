@@ -63,7 +63,7 @@ Requires=network.service
 After=docker.service network.service
 
 [Service]
-ExecStart=/usr/bin/openshift start node --config=/openshift.local.config/node-${minion_name}/node-config.yaml
+ExecStart=/usr/bin/openshift start node --loglevel=3 --config=/openshift.local.config/node-${minion_name}/node-config.yaml
 Restart=on-failure
 RestartSec=10s
 

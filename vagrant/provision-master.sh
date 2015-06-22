@@ -92,7 +92,7 @@ Requires=docker.service network.service
 After=network.service
 
 [Service]
-ExecStart=/usr/bin/openshift start master --master=https://${MASTER_IP}:8443 --nodes=${node_list} --network-plugin=${OPENSHIFT_SDN_PLUGIN}
+ExecStart=/usr/bin/openshift start master --loglevel=3 --master=https://${MASTER_IP}:8443 --nodes=${node_list} --network-plugin=${OPENSHIFT_SDN_PLUGIN}
 WorkingDirectory=/vagrant/
 
 [Install]
