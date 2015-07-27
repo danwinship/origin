@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"path"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -22,12 +23,14 @@ type EtcdConfig struct {
 	SubnetPath       string
 	SubnetConfigPath string
 	MinionPath       string
+	ServicePath      string
 }
 
 type EtcdSubnetRegistry struct {
-	mux     sync.Mutex
-	cli     *etcd.Client
-	etcdCfg *EtcdConfig
+	mux      sync.Mutex
+	cli      *etcd.Client
+	etcdCfg  *EtcdConfig
+	services map[string]*api.Service
 }
 
 func newMinionEvent(action, key, value string) *api.MinionEvent {
@@ -45,6 +48,119 @@ func newMinionEvent(action, key, value string) *api.MinionEvent {
 	}
 
 	fmt.Printf("Error decoding minion event: nil key (%s,%s,%s).\n", action, key, value)
+	return nil
+}
+
+type ServiceJSON struct {
+	Spec struct {
+		Ports []struct {
+			Protocol   api.ServiceProtocol
+			Port       uint
+			TargetPort uint
+		}
+		PortalIP string
+	}
+}
+
+type ServiceEndpointsJSON struct {
+	Subsets []struct {
+		Addresses []struct {
+			IP string
+		}
+	}
+}
+
+func createService(sub *EtcdSubnetRegistry, key, value string) *api.Service {
+	var svcjson ServiceJSON
+	err := json.Unmarshal([]byte(value), &svcjson)
+	if err != nil {
+		log.Errorf("Failed to unmarshal response: %v", err)
+		return nil
+	}
+	if len(svcjson.Spec.Ports) == 0 {
+		log.Errorf("Service has no ports: %s", value)
+		return nil
+	}
+
+	svc := &api.Service{}
+	_, svc.Name = path.Split(key)
+	svc.IP = svcjson.Spec.PortalIP
+	svc.Protocol = svcjson.Spec.Ports[0].Protocol
+	svc.Port = svcjson.Spec.Ports[0].Port
+	svc.TargetPort = svcjson.Spec.Ports[0].TargetPort
+
+	sub.services[svc.Name] = svc
+	return svc
+}
+
+func deleteService(sub *EtcdSubnetRegistry, key string) *api.Service {
+	_, name := path.Split(key)
+	svc := sub.services[name]
+	if svc == nil {
+		return nil
+	}
+
+	delete(sub.services, name)
+	return svc
+}
+
+func changeService(sub *EtcdSubnetRegistry, key, value string) *api.Service {
+	_, name := path.Split(key)
+	svc := sub.services[name]
+	if svc == nil {
+		return nil
+	}
+
+	var epjson ServiceEndpointsJSON
+	err := json.Unmarshal([]byte(value), &epjson)
+	if err != nil {
+		log.Errorf("Failed to unmarshal response: %v", err)
+		return nil
+	}
+
+	if (len(epjson.Subsets) == 0) {
+		svc.Endpoints = make([]string, 0)
+	} else {
+		svc.Endpoints = make([]string, len(epjson.Subsets[0].Addresses))
+		for i, addr := range epjson.Subsets[0].Addresses {
+			svc.Endpoints[i] = addr.IP
+		}
+	}
+
+	return svc
+}
+
+func newServiceEvent(sub *EtcdSubnetRegistry, action, key, value string) *api.ServiceEvent {
+	switch {
+	case action == "create" && strings.Contains(key, "/specs/"):
+		svc := createService(sub, key, value)
+		if svc != nil {
+			return &api.ServiceEvent{
+				Type:    api.Added,
+				Service: svc,
+			}
+		}
+	case action == "delete" && strings.Contains(key, "/specs/"):
+		svc := deleteService(sub, key)
+		if svc != nil {
+			return &api.ServiceEvent{
+				Type:    api.Deleted,
+				Service: svc,
+			}
+		}
+	case action == "compareAndSwap" && strings.Contains(key, "/endpoints/"):
+		svc := changeService(sub, key, value)
+		if svc != nil {
+			return &api.ServiceEvent{
+				Type:    api.Changed,
+				Service: svc,
+			}
+		}
+	default:
+		log.Errorf("Unrecognized service event type: (%s,%s,%s)", action, key, value)
+		return nil
+	}
+
 	return nil
 }
 
@@ -149,6 +265,47 @@ func (sub *EtcdSubnetRegistry) GetMinions() (*[]string, error) {
 		minions = append(minions, minion)
 	}
 	return &minions, nil
+}
+
+func (sub *EtcdSubnetRegistry) InitServices() error {
+	key := sub.etcdCfg.ServicePath
+	_, err := sub.client().SetDir(key, 0)
+	return err
+}
+
+func (sub *EtcdSubnetRegistry) GetServices() (*[]*api.Service, error) {
+	key := sub.etcdCfg.ServicePath
+	resp, err := sub.client().Get(key, false, true)
+	if err != nil {
+		return nil, err
+	}
+	if resp.Node.Dir == false {
+		return nil, errors.New("Service path is not a directory")
+	}
+
+	var specsNode, endpointsNode *etcd.Node = nil, nil
+	for _, node := range resp.Node.Nodes {
+		switch node.Key {
+		case key + "/specs":
+			specsNode = node
+		case key + "/endpoints":
+			endpointsNode = node
+		}
+	}
+	if specsNode == nil || endpointsNode == nil {
+		return nil, errors.New("Service path does not contain 'specs' and 'endpoints' subdirectories")
+	}
+
+	services := make([]*api.Service, 0)
+
+	for _, node := range specsNode.Nodes {
+		services = append(services, createService(sub, node.Key, node.Value))
+	}
+	for _, node := range endpointsNode.Nodes {
+		changeService(sub, node.Key, node.Value)
+	}
+
+	return &services, nil
 }
 
 func (sub *EtcdSubnetRegistry) GetSubnets() (*[]api.Subnet, error) {
@@ -314,6 +471,27 @@ func (sub *EtcdSubnetRegistry) watch(key string, rev uint64, stop chan bool) (*e
 	}
 
 	return rawResp.Unmarshal()
+}
+
+func (sub *EtcdSubnetRegistry) WatchServices(receiver chan *api.ServiceEvent, stop chan bool) error {
+	var rev uint64
+	rev = 0
+	key := sub.etcdCfg.ServicePath
+	log.Infof("Watching %s for new services.", key)
+	for {
+		resp, err := sub.watch(key, rev, stop)
+		if err != nil && err == etcd.ErrWatchStoppedByUser {
+			log.Infof("New service event error: %v", err)
+			return err
+		}
+		if resp == nil || err != nil {
+			continue
+		}
+		rev = resp.Node.ModifiedIndex + 1
+		log.Infof("Issuing a service event: %v", resp)
+		svcevent := newServiceEvent(sub, resp.Action, resp.Node.Key, resp.Node.Value)
+		receiver <- svcevent
+	}
 }
 
 func (sub *EtcdSubnetRegistry) WatchSubnets(receiver chan *api.SubnetEvent, stop chan bool) error {

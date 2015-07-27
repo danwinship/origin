@@ -5,6 +5,7 @@ type EventType string
 const (
 	Added   EventType = "ADDED"
 	Deleted EventType = "DELETED"
+	Changed EventType = "CHANGED"
 )
 
 type SubnetRegistry interface {
@@ -31,6 +32,9 @@ type SubnetRegistry interface {
 	GetNetNamespace(name string) (NetNamespace, error)
 	WriteNetNamespace(name string, id uint) error
 	DeleteNetNamespace(name string) error
+
+	GetServices() (*[]*Service, error)
+	WatchServices(receiver chan *ServiceEvent, stop chan bool) error
 }
 
 type SubnetEvent struct {
@@ -63,4 +67,25 @@ type NetNamespaceEvent struct {
 type NamespaceEvent struct {
 	Type EventType
 	Name string
+}
+
+type ServiceProtocol string
+
+const (
+	TCP ServiceProtocol = "TCP"
+	UDP ServiceProtocol = "UDP"
+)
+
+type Service struct {
+	Name       string
+	IP         string
+	Protocol   ServiceProtocol
+	Port       uint
+	TargetPort uint
+	Endpoints  []string
+}
+
+type ServiceEvent struct {
+	Type    EventType
+	Service *Service
 }

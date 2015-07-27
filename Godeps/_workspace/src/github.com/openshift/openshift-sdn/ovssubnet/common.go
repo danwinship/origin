@@ -265,6 +265,7 @@ func (oc *OvsController) syncWithMaster() error {
 }
 
 func (oc *OvsController) StartNode(sync, skipsetup bool) error {
+	log.Infof("StartNode")
 	if sync {
 		err := oc.syncWithMaster()
 		if err != nil {
@@ -309,6 +310,8 @@ func (oc *OvsController) StartNode(sync, skipsetup bool) error {
 		go oc.watchVnids()
 	}
 	go oc.watchCluster()
+
+	go oc.watchServices()
 
 	if oc.ready != nil {
 		close(oc.ready)
@@ -370,6 +373,23 @@ func (oc *OvsController) watchMinions() {
 			case api.Deleted:
 				oc.DeleteNode(ev.Minion)
 			}
+		case <-oc.sig:
+			log.Error("Signal received. Stopping watching of minions.")
+			stop <- true
+			return
+		}
+	}
+}
+
+func (oc *OvsController) watchServices() {
+	// watch latest?
+	stop := make(chan bool)
+	svcevent := make(chan *api.ServiceEvent)
+	go oc.subnetRegistry.WatchServices(svcevent, stop)
+	for {
+		select {
+		case <-svcevent:
+			log.Info("Service event")
 		case <-oc.sig:
 			log.Error("Signal received. Stopping watching of minions.")
 			stop <- true
