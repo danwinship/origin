@@ -78,6 +78,7 @@ const (
 
 type Service struct {
 	Name       string
+	Namespace  string
 	IP         string
 	Protocol   ServiceProtocol
 	Port       uint
