@@ -297,3 +297,106 @@ func (oi *OsdnRegistryInterface) WriteNetNamespace(name string, id uint) error {
 func (oi *OsdnRegistryInterface) DeleteNetNamespace(name string) error {
 	return oi.oClient.NetNamespaces().Delete(name)
 }
+
+func (oi *OsdnRegistryInterface) GetServices() (*[]*osdnapi.Service, error) {
+	oServList := make([]*osdnapi.Service, 0)
+	kNsList, err := oi.kClient.Namespaces().List(labels.Everything(), fields.Everything())
+	if err != nil {
+		return nil, err
+	}
+	for _, ns := range(kNsList.Items) {
+		kServList, err := oi.kClient.Services(ns.Name).List(labels.Everything())
+		if err != nil {
+			return nil, err
+		}
+
+		// convert kube ServiceList into []*osdnapi.Service
+		for _, kService := range kServList.Items {
+			oService := &osdnapi.Service{Name: kService.ObjectMeta.Name, Namespace: ns.Name, IP: kService.Spec.ClusterIP}
+			oServList = append(oServList, oService)
+		}
+	}
+	return &oServList, nil
+}
+
+func (oi *OsdnRegistryInterface) WatchServices(receiver chan *osdnapi.ServiceEvent, stop chan bool) error {
+	// watch for namespaces, and launch a go func for each namespace that is new
+	// kill the watch for each namespace that is deleted
+	nsevent := make(chan *osdnapi.NamespaceEvent)
+	namespaceTable := make(map[string]chan bool)
+	go oi.WatchNamespaces(nsevent, stop)
+	for {
+		select {
+		case ev := <-nsevent:
+			switch ev.Type {
+			case osdnapi.Added:
+				stopChannel := make(chan bool)
+				namespaceTable[ev.Name] = stopChannel
+				go oi.watchServicesForNamespace(ev.Name, receiver, stopChannel)
+			case osdnapi.Deleted:
+				stopChannel, ok := namespaceTable[ev.Name]
+				if ok {
+					close(stopChannel)
+					delete(namespaceTable, ev.Name)
+				}
+			}
+		case <-stop:
+			// call stop on all namespace watching
+			for _, stopChannel := range namespaceTable {
+				close(stopChannel)
+			}
+			return nil
+		}
+	}
+}
+
+func (oi *OsdnRegistryInterface) watchServicesForNamespace(namespace string, receiver chan *osdnapi.ServiceEvent, stop chan bool) error {
+	serviceEventQueue := oscache.NewEventQueue(cache.MetaNamespaceKeyFunc)
+	listWatch := &cache.ListWatch{
+		ListFunc: func() (runtime.Object, error) {
+			return oi.kClient.Services(namespace).List(labels.Everything())
+		},
+		WatchFunc: func(resourceVersion string) (watch.Interface, error) {
+			return oi.kClient.Services(namespace).Watch(labels.Everything(), fields.Everything(), resourceVersion)
+		},
+	}
+	cache.NewReflector(listWatch, &kapi.Service{}, serviceEventQueue, 4*time.Minute).Run()
+
+	go func() {
+		select {
+		case <-stop:
+			serviceEventQueue.Cancel()
+		}
+	}()
+
+	for {
+		eventType, obj, err := serviceEventQueue.Pop()
+		if err != nil {
+			if _, ok := err.(oscache.EventQueueStopped); ok {
+				return nil
+			}
+			return err
+		}
+		switch eventType {
+		case watch.Added:
+			// we should ignore the modified event because status updates cause unnecessary noise
+			// the only time we would care about modified would be if the service IP changes (does not happen)
+			kServ := obj.(*kapi.Service)
+			oServ := &osdnapi.Service{Name: kServ.ObjectMeta.Name, Namespace: namespace, IP: kServ.Spec.ClusterIP}
+			receiver <- &osdnapi.ServiceEvent{Type: osdnapi.Added, Service: oServ}
+		case watch.Deleted:
+			// TODO: There is a chance that a Delete event will not get triggered.
+			// Need to use a periodic sync loop that lists and compares.
+			kServ := obj.(*kapi.Service)
+			oServ := &osdnapi.Service{Name: kServ.ObjectMeta.Name, Namespace: namespace, IP: kServ.Spec.ClusterIP}
+			receiver <- &osdnapi.ServiceEvent{Type: osdnapi.Deleted, Service: oServ}
+		case watch.Error:
+			// Check if the namespace is dead, if so quit
+			_, err = oi.kClient.Namespaces().Get(namespace)
+			if err != nil {
+				break
+			}
+		}
+	}
+	return nil
+}
