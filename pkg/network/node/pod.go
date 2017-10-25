@@ -46,7 +46,7 @@ const (
 type podHandler interface {
 	setup(req *cniserver.PodRequest) (cnitypes.Result, *runningPod, error)
 	update(req *cniserver.PodRequest) (uint32, error)
-	teardown(req *cniserver.PodRequest) error
+	teardown(req *cniserver.PodRequest, runningPod *runningPod) error
 }
 
 type runningPod struct {
@@ -192,33 +192,30 @@ func (m *podManager) getPod(request *cniserver.PodRequest) *kubehostport.PodPort
 }
 
 // Return a list of Kubernetes RunningPod objects for hostport operations
-func (m *podManager) shouldSyncHostports(newPod *kubehostport.PodPortMapping) []*kubehostport.PodPortMapping {
+func (m *podManager) shouldSyncHostports(changedPod *kubehostport.PodPortMapping) []*kubehostport.PodPortMapping {
 	if m.hostportSyncer == nil {
 		return nil
 	}
 
-	newActiveHostports := false
+	needSync := !m.hostportsSynced
+	if !needSync && changedPod != nil {
+		for _, mapping := range changedPod.PortMappings {
+			if mapping.HostPort != 0 {
+				needSync = true
+				break
+			}
+		}
+	}
+	if !needSync {
+		return nil
+	}
+
+	m.hostportsSynced = true
 	mappings := make([]*kubehostport.PodPortMapping, 0)
 	for _, runningPod := range m.runningPods {
 		mappings = append(mappings, runningPod.podPortMapping)
-		if !newActiveHostports && len(runningPod.podPortMapping.PortMappings) > 0 {
-			newActiveHostports = true
-		}
 	}
-	if newPod != nil && len(newPod.PortMappings) > 0 {
-		newActiveHostports = true
-	}
-
-	// Sync the first time a pod is started (to clear out stale mappings
-	// if kubelet crashed), or when there are any/will be active hostports.
-	// Otherwise don't bother.
-	if !m.hostportsSynced || m.activeHostports || newActiveHostports {
-		m.hostportsSynced = true
-		m.activeHostports = newActiveHostports
-		return mappings
-	}
-
-	return nil
+	return mappings
 }
 
 // Add a request to the podManager CNI request queue
@@ -308,13 +305,14 @@ func (m *podManager) processRequest(request *cniserver.PodRequest) *cniserver.Po
 		}
 		result.Err = err
 	case cniserver.CNI_DEL:
-		if runningPod, exists := m.runningPods[pk]; exists {
+		runningPod, exists := m.runningPods[pk]
+		if exists {
 			delete(m.runningPods, pk)
 			if m.ovs != nil {
 				m.updateLocalMulticastRulesWithLock(runningPod.vnid)
 			}
 		}
-		result.Err = m.podHandler.teardown(request)
+		result.Err = m.podHandler.teardown(request, runningPod)
 	default:
 		result.Err = fmt.Errorf("unhandled CNI request %v", request.Command)
 	}
@@ -535,10 +533,11 @@ func (m *podManager) setup(req *cniserver.PodRequest) (cnitypes.Result, *running
 
 	// Release any IPAM allocations and hostports if the setup failed
 	var success bool
+	var podPortMapping *kubehostport.PodPortMapping
 	defer func() {
 		if !success {
 			m.ipamDel(req.SandboxID)
-			if mappings := m.shouldSyncHostports(nil); mappings != nil {
+			if mappings := m.shouldSyncHostports(podPortMapping); mappings != nil {
 				if err := m.hostportSyncer.SyncHostports(Tun0, mappings); err != nil {
 					glog.Warningf("failed syncing hostports: %v", err)
 				}
@@ -551,7 +550,7 @@ func (m *podManager) setup(req *cniserver.PodRequest) (cnitypes.Result, *running
 	if err := kapiv1.Convert_api_Pod_To_v1_Pod(pod, &v1Pod, nil); err != nil {
 		return nil, nil, err
 	}
-	podPortMapping := kubehostport.ConstructPodPortMapping(&v1Pod, podIP)
+	podPortMapping = kubehostport.ConstructPodPortMapping(&v1Pod, podIP)
 	if mappings := m.shouldSyncHostports(podPortMapping); mappings != nil {
 		if err := m.hostportSyncer.OpenPodHostportsAndSync(podPortMapping, Tun0, mappings); err != nil {
 			return nil, nil, err
@@ -649,7 +648,7 @@ func (m *podManager) update(req *cniserver.PodRequest) (uint32, error) {
 }
 
 // Clean up all pod networking (clear OVS flows, release IPAM lease, remove host/container veth)
-func (m *podManager) teardown(req *cniserver.PodRequest) error {
+func (m *podManager) teardown(req *cniserver.PodRequest, runningPod *runningPod) error {
 	defer PodTeardownLatency.WithLabelValues(req.PodNamespace, req.PodName, req.SandboxID).Observe(sinceInMicroseconds(time.Now()))
 
 	netnsValid := true
@@ -676,9 +675,11 @@ func (m *podManager) teardown(req *cniserver.PodRequest) error {
 		errList = append(errList, err)
 	}
 
-	if mappings := m.shouldSyncHostports(nil); mappings != nil {
-		if err := m.hostportSyncer.SyncHostports(Tun0, mappings); err != nil {
-			errList = append(errList, err)
+	if runningPod != nil {
+		if mappings := m.shouldSyncHostports(runningPod.podPortMapping); mappings != nil {
+			if err := m.hostportSyncer.SyncHostports(Tun0, mappings); err != nil {
+				errList = append(errList, err)
+			}
 		}
 	}
 

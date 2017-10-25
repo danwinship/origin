@@ -136,7 +136,7 @@ func (pt *podTester) update(req *cniserver.PodRequest) (uint32, error) {
 	return 0, nil
 }
 
-func (pt *podTester) teardown(req *cniserver.PodRequest) error {
+func (pt *podTester) teardown(req *cniserver.PodRequest, runningPod *runningPod) error {
 	pod, err := pt.getExpectedPod(req.PodNamespace, req.PodName, req.Command)
 	if err == nil {
 		pod.deleted = true
