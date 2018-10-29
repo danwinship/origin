@@ -15,6 +15,7 @@ import (
 	networkapi "github.com/openshift/api/network/v1"
 	"github.com/openshift/origin/pkg/network/common"
 	"github.com/openshift/origin/pkg/util/ovs"
+	"github.com/openshift/origin/pkg/version"
 
 	kerrors "k8s.io/apimachinery/pkg/util/errors"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -49,7 +50,9 @@ func (oc *ovsController) getVersionNote() string {
 	if ruleVersion > 254 {
 		panic("Version too large!")
 	}
-	return fmt.Sprintf("%02X.%02X", oc.pluginId, ruleVersion)
+	osMajor, _ := strconv.ParseUint(version.Get().Major, 10, 8)
+	osMinor, _ := strconv.ParseUint(version.Get().Minor, 10, 8)
+	return fmt.Sprintf("%02X.%02X.%02X.%02X", osMajor, osMinor, oc.pluginId, ruleVersion)
 }
 
 func (oc *ovsController) AlreadySetUp(vxlanPort uint32) bool {
