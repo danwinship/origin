@@ -92,6 +92,7 @@ type OsdnNodeConfig struct {
 }
 
 type OsdnNode struct {
+	pluginName         string
 	policy             osdnPolicy
 	kClient            kclientset.Interface
 	networkClient      networkclient.Interface
@@ -128,7 +129,9 @@ func New(c *OsdnNodeConfig) (*OsdnNode, error) {
 	var policy osdnPolicy
 	var pluginId int
 	var useConnTrack bool
-	switch strings.ToLower(c.PluginName) {
+
+	pluginName := strings.ToLower(c.PluginName)
+	switch pluginName {
 	case network.SingleTenantPluginName:
 		policy = NewSingleTenantPlugin()
 		pluginId = 0
@@ -136,8 +139,20 @@ func New(c *OsdnNodeConfig) (*OsdnNode, error) {
 		policy = NewMultiTenantPlugin()
 		pluginId = 1
 	case network.NetworkPolicyPluginName:
-		policy = NewNetworkPolicyPlugin()
+		policy = NewNetworkPolicyPlugin(false)
 		pluginId = 2
+		useConnTrack = true
+	case network.OpenShiftSDNOpenPluginName:
+		policy = NewNetworkPolicyPlugin(false)
+		pluginId = 3
+		useConnTrack = true
+	case network.OpenShiftSDNIsolatedPluginName:
+		policy = NewNetworkPolicyPlugin(true)
+		pluginId = 4
+		useConnTrack = true
+	case network.OpenShiftSDNFullyIsolatedPluginName:
+		policy = NewNetworkPolicyPlugin(true)
+		pluginId = 5
 		useConnTrack = true
 	default:
 		// Not an OpenShift plugin
@@ -164,6 +179,7 @@ func New(c *OsdnNodeConfig) (*OsdnNode, error) {
 	oc := NewOVSController(ovsif, pluginId, useConnTrack, c.SelfIP)
 
 	plugin := &OsdnNode{
+		pluginName:         pluginName,
 		policy:             policy,
 		kClient:            c.KClient,
 		networkClient:      c.NetworkClient,
@@ -264,7 +280,7 @@ func GetLinkDetails(ip string) (netlink.Link, *net.IPNet, error) {
 func (node *OsdnNode) Start() error {
 	glog.V(2).Infof("Starting openshift-sdn network plugin")
 
-	if err := validateNetworkPluginName(node.networkClient, node.policy.Name()); err != nil {
+	if err := validateNetworkPluginName(node.networkClient, node.pluginName); err != nil {
 		return fmt.Errorf("failed to validate network configuration: %v", err)
 	}
 
