@@ -56,7 +56,7 @@ func newEgressIPWatcher(oc *ovsController, localIP string, masqueradeBit *int32)
 
 func (eip *egressIPWatcher) Start(networkInformers networkinformers.SharedInformerFactory, iptables *NodeIPTables) error {
 	var err error
-	if eip.localEgressLink, eip.localEgressNet, err = GetLinkDetails(eip.localIP); err != nil {
+	if eip.localEgressLink, eip.localEgressNet, err = getLinkDetails(eip.localIP); err != nil {
 		// Not expected, should already be caught by node.New()
 		return nil
 	}
@@ -69,6 +69,33 @@ func (eip *egressIPWatcher) Start(networkInformers networkinformers.SharedInform
 
 	eip.tracker.Start(networkInformers.Network().V1().HostSubnets(), networkInformers.Network().V1().NetNamespaces())
 	return nil
+}
+
+func getLinkDetails(ip string) (netlink.Link, *net.IPNet, error) {
+	links, err := netlink.LinkList()
+	if err != nil {
+		return nil, nil, err
+	}
+
+	for _, link := range links {
+		addrs, err := netlink.AddrList(link, netlink.FAMILY_V4)
+		if err != nil {
+			glog.Warningf("Could not get addresses of interface %q: %v", link.Attrs().Name, err)
+			continue
+		}
+
+		for _, addr := range addrs {
+			if addr.IP.String() == ip {
+				_, ipNet, err := net.ParseCIDR(addr.IPNet.String())
+				if err != nil {
+					return nil, nil, fmt.Errorf("could not parse CIDR network from address %q: %v", ip, err)
+				}
+				return link, ipNet, nil
+			}
+		}
+	}
+
+	return nil, nil, fmt.Errorf("could not find network interface")
 }
 
 // Convert vnid to a hex value that is not 0, does not have masqueradeBit set, and isn't

@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"net"
 
-	"github.com/golang/glog"
-
 	kerrors "k8s.io/apimachinery/pkg/util/errors"
 )
 
@@ -59,33 +57,6 @@ func GetHostIPNetworks(skipInterfaces []string) ([]*net.IPNet, []net.IP, error) 
 		}
 	}
 	return hostIPNets, hostIPs, kerrors.NewAggregate(errList)
-}
-
-func GetNodeIP(nodeName string) (string, error) {
-	ip := net.ParseIP(nodeName)
-	if ip == nil {
-		addrs, err := net.LookupIP(nodeName)
-		if err != nil {
-			return "", fmt.Errorf("Failed to lookup IP address for node %s: %v", nodeName, err)
-		}
-		for _, addr := range addrs {
-			// Skip loopback and non IPv4 addrs
-			if addr.IsLoopback() || addr.To4() == nil {
-				glog.V(5).Infof("Skipping loopback/non-IPv4 addr: %q for node %s", addr.String(), nodeName)
-				continue
-			}
-			ip = addr
-			break
-		}
-	} else if ip.IsLoopback() || ip.To4() == nil {
-		glog.V(5).Infof("Skipping loopback/non-IPv4 addr: %q for node %s", ip.String(), nodeName)
-		ip = nil
-	}
-
-	if ip == nil || len(ip.String()) == 0 {
-		return "", fmt.Errorf("Failed to obtain IP address from node name: %s", nodeName)
-	}
-	return ip.String(), nil
 }
 
 // ParseCIDRMask parses a CIDR string and ensures that it has no bits set beyond the
