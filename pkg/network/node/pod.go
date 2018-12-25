@@ -563,6 +563,7 @@ func (m *podManager) update(req *cniserver.PodRequest) (uint32, error) {
 	if err := m.ovs.UpdatePod(req.SandboxID, vnid); err != nil {
 		return 0, err
 	}
+	m.policy.EnsureVNIDRules(vnid)
 	return vnid, nil
 }
 

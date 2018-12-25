@@ -279,20 +279,14 @@ func (node *OsdnNode) Start() error {
 	if networkChanged {
 		var pods, podsToKill []kapi.Pod
 
-		pods, err = node.GetLocalPods(metav1.NamespaceAll)
+		pods, err = node.GetSDNPods(metav1.NamespaceAll)
 		if err != nil {
 			return err
 		}
 		for _, p := range pods {
-			// Ignore HostNetwork pods since they don't go through OVS
-			if p.Spec.SecurityContext != nil && p.Spec.SecurityContext.HostNetwork {
-				continue
-			}
 			if err := node.UpdatePod(p); err != nil {
 				glog.Warningf("will restart pod '%s/%s' due to update failure on restart: %s", p.Namespace, p.Name, err)
 				podsToKill = append(podsToKill, p)
-			} else if vnid, err := node.policy.GetVNID(p.Namespace); err == nil {
-				node.policy.EnsureVNIDRules(vnid)
 			}
 		}
 
@@ -354,7 +348,7 @@ func (node *OsdnNode) UpdatePod(pod kapi.Pod) error {
 	return err
 }
 
-func (node *OsdnNode) GetLocalPods(namespace string) ([]kapi.Pod, error) {
+func (node *OsdnNode) GetSDNPods(namespace string) ([]kapi.Pod, error) {
 	fieldSelector := fields.Set{"spec.nodeName": node.hostName}.AsSelector()
 	opts := metav1.ListOptions{
 		LabelSelector: labels.Everything().String(),
@@ -365,12 +359,17 @@ func (node *OsdnNode) GetLocalPods(namespace string) ([]kapi.Pod, error) {
 		return nil, err
 	}
 
-	// Filter running pods
 	pods := make([]kapi.Pod, 0, len(podList.Items))
 	for _, pod := range podList.Items {
-		if pod.Status.Phase == kapi.PodRunning {
-			pods = append(pods, pod)
+		// Ignore HostNetwork pods since they don't go through OVS
+		if pod.Spec.SecurityContext != nil && pod.Spec.SecurityContext.HostNetwork {
+			continue
 		}
+		// Ignore non-running pods
+		if pod.Status.Phase == kapi.PodRunning {
+			continue
+		}
+		pods = append(pods, pod)
 	}
 	return pods, nil
 }
