@@ -373,7 +373,6 @@ var (
 			`Simple pod should handle in-cluster config`,                       // kubectl cp is not preserving executable bit
 			`Services should be able to up and down services`,                  // we don't have wget installed on nodes
 			`Network should set TCP CLOSE_WAIT timeout`,                        // possibly some difference between ubuntu and fedora
-			`Services should be able to create a functioning NodePort service`, // https://bugzilla.redhat.com/show_bug.cgi?id=1711603
 			`\[NodeFeature:Sysctls\]`,                                          // needs SCC support
 			`should check kube-proxy urls`,                                     // previously this test was skipped b/c we reported -1 as the number of nodes, now we report proper number and test fails
 			`extremely long build/bc names are not problematic`,                // there's a problem in kubelet when creating log directory in vendor/k8s.io/kubernetes/pkg/kubelet/kuberuntime/helpers.go:181, this changed in https://github.com/kubernetes/kubernetes/pull/74441
