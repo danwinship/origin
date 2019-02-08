@@ -76,17 +76,24 @@ func (vmap *masterVNIDMap) isAdminNamespace(nsName string) bool {
 	return false
 }
 
-func (vmap *masterVNIDMap) markAllocatedNetID(netid uint32) error {
-	// Skip GlobalVNID, not part of netID allocation range
-	if netid == network.GlobalVNID {
+func (vmap *masterVNIDMap) markAllocatedNetID(netns *networkv1.NetNamespace) error {
+	if netns.NetID == network.GlobalVNID {
+		if !vmap.allowRenumbering && netns.NetName != metav1.NamespaceDefault {
+			return fmt.Errorf("there are NetNamespaces with duplicate NetIDs (eg, %q and %q both have NetID 0)", netns.NetName, metav1.NamespaceDefault)
+		}
+		// else skip GlobalVNID, not part of netID allocation range
 		return nil
 	}
 
-	switch err := vmap.netIDManager.Allocate(netid); err {
-	case nil: // Expected normal case
-	case pnetid.ErrAllocated: // Expected when project networks are joined
+	switch err := vmap.netIDManager.Allocate(netns.NetID); err {
+	case nil:
+		// OK
+	case pnetid.ErrAllocated:
+		if !vmap.allowRenumbering {
+			return fmt.Errorf("there are NetNamespaces with duplicate NetIDs (eg, %q and at least one other NetNamespace have NetID %d)", netns.NetName, netns.NetID)
+		}
 	default:
-		return fmt.Errorf("unable to allocate netid %d: %v", netid, err)
+		return fmt.Errorf("unable to allocate netid %d: %v", netns.NetID, err)
 	}
 	return nil
 }
@@ -268,7 +275,6 @@ func (vmap *masterVNIDMap) updateVNID(networkClient networkclient.Interface, ori
 }
 
 //--------------------- Master methods ----------------------
-
 func (master *OsdnMaster) startVNIDMaster() error {
 	if err := master.initNetIDAllocator(); err != nil {
 		return err
@@ -287,7 +293,7 @@ func (master *OsdnMaster) initNetIDAllocator() error {
 	}
 
 	for _, netns := range netnsList.Items {
-		if err := master.vnids.markAllocatedNetID(netns.NetID); err != nil {
+		if err := master.vnids.markAllocatedNetID(&netns); err != nil {
 			utilruntime.HandleError(err)
 		}
 		master.vnids.setVNID(netns.Name, netns.NetID)
