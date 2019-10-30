@@ -32,6 +32,7 @@ import (
 type AddressFamily uint
 
 const (
+	familyAny  AddressFamily = 0
 	familyIPv4 AddressFamily = 4
 	familyIPv6 AddressFamily = 6
 )
@@ -254,19 +255,24 @@ func getIPFromInterface(intfName string, forFamily AddressFamily, nw networkInte
 	return nil, nil
 }
 
-// memberOF tells if the IP is of the desired family. Used for checking interface addresses.
-func memberOf(ip net.IP, family AddressFamily) bool {
+// addressFamily returns the IP family of the given address
+func addressFamily(ip net.IP) AddressFamily {
 	if ip.To4() != nil {
-		return family == familyIPv4
+		return familyIPv4
 	} else {
-		return family == familyIPv6
+		return familyIPv6
 	}
+}
+
+// memberOf tells if the IP is of the desired family. Used for checking interface addresses.
+func memberOf(ip net.IP, family AddressFamily) bool {
+	return addressFamily(ip) == family
 }
 
 // chooseIPFromHostInterfaces looks at all system interfaces, trying to find one that is up that
 // has a global unicast address (non-loopback, non-link local, non-point2point), and returns the IP.
 // Searches for IPv4 addresses, and then IPv6 addresses.
-func chooseIPFromHostInterfaces(nw networkInterfacer) (net.IP, error) {
+func chooseIPFromHostInterfaces(nw networkInterfacer, requestedFamily AddressFamily) (net.IP, error) {
 	intfs, err := nw.Interfaces()
 	if err != nil {
 		return nil, err
@@ -275,6 +281,9 @@ func chooseIPFromHostInterfaces(nw networkInterfacer) (net.IP, error) {
 		return nil, fmt.Errorf("no interfaces found on host.")
 	}
 	for _, family := range []AddressFamily{familyIPv4, familyIPv6} {
+		if requestedFamily != familyAny && family != requestedFamily {
+			continue
+		}
 		klog.V(4).Infof("Looking for system interface with a global IPv%d address", uint(family))
 		for _, intf := range intfs {
 			if !isInterfaceUp(&intf) {
@@ -321,15 +330,19 @@ func chooseIPFromHostInterfaces(nw networkInterfacer) (net.IP, error) {
 // IP of the interface with a gateway on it (with priority given to IPv4). For a node
 // with no internet connection, it returns error.
 func ChooseHostInterface() (net.IP, error) {
+	return chooseHostInterface(familyAny)
+}
+
+func chooseHostInterface(family AddressFamily) (net.IP, error) {
 	var nw networkInterfacer = networkInterface{}
 	if _, err := os.Stat(ipv4RouteFile); os.IsNotExist(err) {
-		return chooseIPFromHostInterfaces(nw)
+		return chooseIPFromHostInterfaces(nw, family)
 	}
 	routes, err := getAllDefaultRoutes()
 	if err != nil {
 		return nil, err
 	}
-	return chooseHostInterfaceFromRoute(routes, nw)
+	return chooseHostInterfaceFromRoute(routes, nw, family)
 }
 
 // networkInterfacer defines an interface for several net library functions. Production
@@ -379,8 +392,11 @@ func getAllDefaultRoutes() ([]Route, error) {
 // chooseHostInterfaceFromRoute cycles through each default route provided, looking for a
 // global IP address from the interface for the route. Will first look all each IPv4 route for
 // an IPv4 IP, and then will look at each IPv6 route for an IPv6 IP.
-func chooseHostInterfaceFromRoute(routes []Route, nw networkInterfacer) (net.IP, error) {
+func chooseHostInterfaceFromRoute(routes []Route, nw networkInterfacer, requestedFamily AddressFamily) (net.IP, error) {
 	for _, family := range []AddressFamily{familyIPv4, familyIPv6} {
+		if requestedFamily != familyAny && family != requestedFamily {
+			continue
+		}
 		klog.V(4).Infof("Looking for default routes with IPv%d addresses", uint(family))
 		for _, route := range routes {
 			if route.Family != family {
@@ -402,15 +418,15 @@ func chooseHostInterfaceFromRoute(routes []Route, nw networkInterfacer) (net.IP,
 }
 
 // If bind-address is usable, return it directly
-// If bind-address is not usable (unset, 0.0.0.0, or loopback), we will use the host's default
-// interface.
+// If bind-address is unset, return the host's default IP
+// If bind-address is unspecified or loopback, return the default interface IP
+// of the same address family as bindAddress.
 func ChooseBindAddress(bindAddress net.IP) (net.IP, error) {
-	if bindAddress == nil || bindAddress.IsUnspecified() || bindAddress.IsLoopback() {
-		hostIP, err := ChooseHostInterface()
-		if err != nil {
-			return nil, err
-		}
-		bindAddress = hostIP
+	if bindAddress == nil {
+		return ChooseHostInterface()
+	} else if bindAddress.IsUnspecified() || bindAddress.IsLoopback() {
+		return chooseHostInterface(addressFamily(bindAddress))
+	} else {
+		return bindAddress, nil
 	}
-	return bindAddress, nil
 }
