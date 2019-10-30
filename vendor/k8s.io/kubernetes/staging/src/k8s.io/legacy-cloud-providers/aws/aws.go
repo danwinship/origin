@@ -1428,9 +1428,9 @@ func (c *Cloud) NodeAddresses(ctx context.Context, name types.NodeName) ([]v1.No
 				continue
 			}
 			ipPath := path.Join("network/interfaces/macs/", macID, "local-ipv4s")
-			if c.cfg.Global.HackIPv6Only {
+//			if c.cfg.Global.HackIPv6Only {
 				ipPath = path.Join("network/interfaces/macs/", macID, "ipv6s")
-			}
+//			}
 			macIPs[num], err = c.metadata.GetMetadata(ipPath)
 			if err != nil {
 				return nil, fmt.Errorf("error querying AWS metadata for %q: %q", ipPath, err)
@@ -1450,7 +1450,7 @@ func (c *Cloud) NodeAddresses(ctx context.Context, name types.NodeName) ([]v1.No
 			}
 		}
 
-		if !c.cfg.Global.HackIPv6Only {
+		if false && !c.cfg.Global.HackIPv6Only {
 			externalIP, err := c.metadata.GetMetadata("public-ipv4")
 			if err != nil {
 				//TODO: It would be nice to be able to determine the reason for the failure,
