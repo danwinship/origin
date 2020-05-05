@@ -25,8 +25,6 @@ import (
 	utilwait "k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/kubernetes/pkg/master/ports"
 	"k8s.io/kubernetes/test/e2e/framework"
-	e2eservice "k8s.io/kubernetes/test/e2e/framework/service"
-	e2essh "k8s.io/kubernetes/test/e2e/framework/ssh"
 
 	. "github.com/onsi/ginkgo"
 )
@@ -242,7 +240,7 @@ var _ = SIGDescribe("Networking", func() {
 			framework.SkipUnlessProviderIs(framework.ProvidersWithSSH...)
 			framework.SkipUnlessSSHKeyPresent()
 
-			hosts, err := e2essh.NodeSSHHosts(f.ClientSet)
+			hosts, err := framework.NodeSSHHosts(f.ClientSet)
 			framework.ExpectNoError(err, "failed to find external/internal IPs for every node")
 			if len(hosts) == 0 {
 				framework.Failf("No ssh-able nodes")
@@ -254,9 +252,9 @@ var _ = SIGDescribe("Networking", func() {
 			svc := "iptables-flush-test"
 
 			defer func() {
-				framework.ExpectNoError(e2eservice.StopServeHostnameService(f.ClientSet, ns, svc))
+				framework.ExpectNoError(framework.StopServeHostnameService(f.ClientSet, ns, svc))
 			}()
-			podNames, svcIP, err := e2eservice.StartServeHostnameService(f.ClientSet, getServeHostnameService(svc), ns, numPods)
+			podNames, svcIP, err := framework.StartServeHostnameService(f.ClientSet, f.InternalClientset, getServeHostnameService(svc), ns, numPods)
 			framework.ExpectNoError(err, "failed to create replication controller with service: %s in the namespace: %s", svc, ns)
 
 			// Ideally we want to reload the system firewall, but we don't necessarily
@@ -265,9 +263,9 @@ var _ = SIGDescribe("Networking", func() {
 			// chains.
 
 			By("dumping iptables rules on a node")
-			result, err := e2essh.SSH("sudo iptables-save", host, framework.TestContext.Provider)
+			result, err := framework.SSH("sudo iptables-save", host, framework.TestContext.Provider)
 			if err != nil || result.Code != 0 {
-				e2essh.LogResult(result)
+				framework.LogSSHResult(result)
 				framework.Failf("couldn't dump iptable rules: %v", err)
 			}
 
@@ -297,20 +295,20 @@ var _ = SIGDescribe("Networking", func() {
 			cmd := strings.Join(append(deleteRuleCmds, deleteChainCmds...), "\n")
 
 			By("deleting all KUBE-* iptables chains")
-			result, err = e2essh.SSH(cmd, host, framework.TestContext.Provider)
+			result, err = framework.SSH(cmd, host, framework.TestContext.Provider)
 			if err != nil || result.Code != 0 {
-				e2essh.LogResult(result)
+				framework.LogSSHResult(result)
 				framework.Failf("couldn't delete iptable rules: %v", err)
 			}
 
 			By("verifying that kube-proxy rules are eventually recreated")
-			framework.ExpectNoError(e2eservice.VerifyServeHostnameServiceUp(f.ClientSet, ns, host, podNames, svcIP, servicePort))
+			framework.ExpectNoError(framework.VerifyServeHostnameServiceUp(f.ClientSet, ns, host, podNames, svcIP, servicePort))
 
 			By("verifying that kubelet rules are eventually recreated")
 			err = utilwait.PollImmediate(framework.Poll, framework.RestartNodeReadyAgainTimeout, func() (bool, error) {
-				result, err = e2essh.SSH("sudo iptables-save -t nat", host, framework.TestContext.Provider)
+				result, err = framework.SSH("sudo iptables-save -t nat", host, framework.TestContext.Provider)
 				if err != nil || result.Code != 0 {
-					e2essh.LogResult(result)
+					framework.LogSSHResult(result)
 					return false, err
 				}
 
