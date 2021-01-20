@@ -95,49 +95,16 @@ func decodeProvider(provider string, dryRun, discover bool) (*exutilcluster.Clus
 		if len(providerInfo.Type) == 0 {
 			return nil, fmt.Errorf("provider must be a JSON object with the 'type' key")
 		}
-		var cloudConfig e2e.CloudConfig
-		if err := json.Unmarshal([]byte(provider), &cloudConfig); err != nil {
-			return nil, fmt.Errorf("provider must decode into the cloud config object: %v", err)
-		}
 
-		// attempt to load the default config, then overwrite with any values from the passed
-		// object that can be overriden
 		var config *exutilcluster.ClusterConfiguration
 		if discover {
 			config, _ = exutilcluster.DiscoverConfig()
-		}
-		if config == nil {
-			config = &exutilcluster.ClusterConfiguration{
-				ProviderName: providerInfo.Type,
-				ProjectID:    cloudConfig.ProjectID,
-				Region:       cloudConfig.Region,
-				Zone:         cloudConfig.Zone,
-				Zones:        cloudConfig.Zones,
-				NumNodes:     cloudConfig.NumNodes,
-				MultiMaster:  cloudConfig.MultiMaster,
-				MultiZone:    cloudConfig.MultiZone,
-				ConfigFile:   cloudConfig.ConfigFile,
-			}
 		} else {
-			config.ProviderName = providerInfo.Type
-			if len(cloudConfig.ProjectID) > 0 {
-				config.ProjectID = cloudConfig.ProjectID
-			}
-			if len(cloudConfig.Region) > 0 {
-				config.Region = cloudConfig.Region
-			}
-			if len(cloudConfig.Zone) > 0 {
-				config.Zone = cloudConfig.Zone
-			}
-			if len(cloudConfig.Zones) > 0 {
-				config.Zones = cloudConfig.Zones
-			}
-			if len(cloudConfig.ConfigFile) > 0 {
-				config.ConfigFile = cloudConfig.ConfigFile
-			}
-			if cloudConfig.NumNodes > 0 {
-				config.NumNodes = cloudConfig.NumNodes
-			}
+			config = &exutilcluster.ClusterConfiguration{}
+		}
+
+		if err := json.Unmarshal([]byte(provider), config); err != nil {
+			return nil, fmt.Errorf("provider must decode into the ClusterConfig object: %v", err)
 		}
 		return config, nil
 	}
