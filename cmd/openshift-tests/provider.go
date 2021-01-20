@@ -13,7 +13,7 @@ import (
 	e2e "k8s.io/kubernetes/test/e2e/framework"
 
 	exutil "github.com/openshift/origin/test/extended/util"
-	exutilcloud "github.com/openshift/origin/test/extended/util/cloud"
+	exutilcluster "github.com/openshift/origin/test/extended/util/cluster"
 
 	// Initialize ovirt as a provider
 	_ "github.com/openshift/origin/test/extended/util/ovirt"
@@ -28,7 +28,7 @@ import (
 
 type TestNameMatchesFunc func(name string) bool
 
-func initializeTestFramework(context *e2e.TestContextType, config *exutilcloud.ClusterConfiguration, dryRun bool) error {
+func initializeTestFramework(context *e2e.TestContextType, config *exutilcluster.ClusterConfiguration, dryRun bool) error {
 	// update context with loaded config
 	context.Provider = config.ProviderName
 	context.CloudConfig = e2e.CloudConfig{
@@ -64,7 +64,7 @@ func initializeTestFramework(context *e2e.TestContextType, config *exutilcloud.C
 	return nil
 }
 
-func getProviderMatchFn(config *exutilcloud.ClusterConfiguration) TestNameMatchesFunc {
+func getProviderMatchFn(config *exutilcluster.ClusterConfiguration) TestNameMatchesFunc {
 	// given the configuration we have loaded, skip tests that our provider should exclude
 	// or our network plugin should exclude
 	var skips []string
@@ -83,24 +83,24 @@ func getProviderMatchFn(config *exutilcloud.ClusterConfiguration) TestNameMatche
 	return matchFn
 }
 
-func decodeProvider(provider string, dryRun, discover bool) (*exutilcloud.ClusterConfiguration, error) {
+func decodeProvider(provider string, dryRun, discover bool) (*exutilcluster.ClusterConfiguration, error) {
 	switch provider {
 	case "none":
-		return &exutilcloud.ClusterConfiguration{ProviderName: "skeleton"}, nil
+		return &exutilcluster.ClusterConfiguration{ProviderName: "skeleton"}, nil
 
 	case "":
 		if _, ok := os.LookupEnv("KUBE_SSH_USER"); ok {
 			if _, ok := os.LookupEnv("LOCAL_SSH_KEY"); ok {
-				return &exutilcloud.ClusterConfiguration{ProviderName: "local"}, nil
+				return &exutilcluster.ClusterConfiguration{ProviderName: "local"}, nil
 			}
 		}
 		if dryRun {
-			return &exutilcloud.ClusterConfiguration{ProviderName: "skeleton"}, nil
+			return &exutilcluster.ClusterConfiguration{ProviderName: "skeleton"}, nil
 		}
 		fallthrough
 
 	case "azure", "aws", "gce", "vsphere":
-		config, err := exutilcloud.DiscoverConfig()
+		config, err := exutilcluster.DiscoverConfig()
 		if err != nil {
 			return nil, err
 		}
@@ -124,12 +124,12 @@ func decodeProvider(provider string, dryRun, discover bool) (*exutilcloud.Cluste
 
 		// attempt to load the default config, then overwrite with any values from the passed
 		// object that can be overriden
-		var config *exutilcloud.ClusterConfiguration
+		var config *exutilcluster.ClusterConfiguration
 		if discover {
-			config, _ = exutilcloud.DiscoverConfig()
+			config, _ = exutilcluster.DiscoverConfig()
 		}
 		if config == nil {
-			config = &exutilcloud.ClusterConfiguration{
+			config = &exutilcluster.ClusterConfiguration{
 				ProviderName: providerInfo.Type,
 				ProjectID:    cloudConfig.ProjectID,
 				Region:       cloudConfig.Region,

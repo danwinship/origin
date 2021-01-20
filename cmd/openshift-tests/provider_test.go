@@ -6,7 +6,7 @@ import (
 
 	configv1 "github.com/openshift/api/config/v1"
 	operatorv1 "github.com/openshift/api/operator/v1"
-	exutilcloud "github.com/openshift/origin/test/extended/util/cloud"
+	exutilcluster "github.com/openshift/origin/test/extended/util/cluster"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -219,7 +219,7 @@ func TestDecodeProvider(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			exutilcloud.SetTestConfig(tc.discoveredPlatform, tc.discoveredMasters, nonMasters, tc.discoveredNetwork)
+			exutilcluster.SetTestConfig(tc.discoveredPlatform, tc.discoveredMasters, nonMasters, tc.discoveredNetwork)
 			config, err := decodeProvider(tc.provider, false, tc.discoveredPlatform != nil)
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
