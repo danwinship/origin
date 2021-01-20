@@ -34,7 +34,11 @@ type ClusterConfiguration struct {
 	Zones       []string
 	ConfigFile  string
 
-	NetworkPluginIDs []string
+	// NetworkPlugin is the "official" plugin name
+	NetworkPlugin string
+	// NetworkPluginMode is an optional sub-identifier for the NetworkPlugin.
+	// (Currently it is only used for OpenShiftSDN.)
+	NetworkPluginMode string `json:",omitempty"`
 }
 
 func (c *ClusterConfiguration) ToJSONString() string {
@@ -97,12 +101,6 @@ func DiscoverConfig() (*ClusterConfiguration, error) {
 		networkSpec = &networkConfig.Spec
 	}
 
-	var networkPluginIDs []string
-	networkPluginIDs = append(networkPluginIDs, string(networkSpec.DefaultNetwork.Type))
-	if networkSpec.DefaultNetwork.OpenShiftSDNConfig != nil && networkSpec.DefaultNetwork.OpenShiftSDNConfig.Mode != "" {
-		networkPluginIDs = append(networkPluginIDs, string(networkSpec.DefaultNetwork.Type)+"/"+string(networkSpec.DefaultNetwork.OpenShiftSDNConfig.Mode))
-	}
-
 	zones := sets.NewString()
 	for _, node := range masters.Items {
 		zones.Insert(node.Labels["failure-domain.beta.kubernetes.io/zone"])
@@ -110,10 +108,9 @@ func DiscoverConfig() (*ClusterConfiguration, error) {
 	zones.Delete("")
 
 	config := &ClusterConfiguration{
-		MultiMaster:      len(masters.Items) > 1,
-		MultiZone:        zones.Len() > 1,
-		Zones:            zones.List(),
-		NetworkPluginIDs: networkPluginIDs,
+		MultiMaster: len(masters.Items) > 1,
+		MultiZone:   zones.Len() > 1,
+		Zones:       zones.List(),
 	}
 	if zones.Len() > 0 {
 		config.Zone = zones.List()[0]
@@ -152,6 +149,11 @@ func DiscoverConfig() (*ClusterConfiguration, error) {
 		config.ConfigFile = tmpFile.Name()
 	}
 
+	config.NetworkPlugin = string(networkSpec.DefaultNetwork.Type)
+	if networkSpec.DefaultNetwork.OpenShiftSDNConfig != nil && networkSpec.DefaultNetwork.OpenShiftSDNConfig.Mode != "" {
+		config.NetworkPluginMode = string(networkSpec.DefaultNetwork.OpenShiftSDNConfig.Mode)
+	}
+
 	return config, nil
 }
 
@@ -172,8 +174,11 @@ func SetTestConfig(platformStatus *configv1.PlatformStatus, masters, nonMasters 
 func (c *ClusterConfiguration) MatchFn() func(string) bool {
 	var skips []string
 	skips = append(skips, fmt.Sprintf("[Skipped:%s]", c.ProviderName))
-	for _, id := range c.NetworkPluginIDs {
-		skips = append(skips, fmt.Sprintf("[Skipped:Network/%s]", id))
+	if c.NetworkPlugin != "" {
+		skips = append(skips, fmt.Sprintf("[Skipped:Network/%s]", c.NetworkPlugin))
+		if c.NetworkPluginMode != "" {
+			skips = append(skips, fmt.Sprintf("[Skipped:Network/%s/%s]", c.NetworkPlugin, c.NetworkPluginMode))
+		}
 	}
 	matchFn := func(name string) bool {
 		for _, skip := range skips {

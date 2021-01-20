@@ -153,7 +153,7 @@ func TestDecodeProvider(t *testing.T) {
 			discoveredPlatform: gcePlatform,
 			discoveredMasters:  gceMasters,
 			discoveredNetwork:  sdnConfig,
-			expectedConfig:     `{"type":"gce","ProjectID":"openshift-gce-devel-ci","Region":"us-east1","Zone":"us-east1-a","NumNodes":3,"MultiMaster":true,"MultiZone":true,"Zones":["us-east1-a","us-east1-b","us-east1-c"],"ConfigFile":"","NetworkPluginIDs":["OpenShiftSDN"]}`,
+			expectedConfig:     `{"type":"gce","ProjectID":"openshift-gce-devel-ci","Region":"us-east1","Zone":"us-east1-a","NumNodes":3,"MultiMaster":true,"MultiZone":true,"Zones":["us-east1-a","us-east1-b","us-east1-c"],"ConfigFile":"","NetworkPlugin":"OpenShiftSDN"}`,
 			runTests:           sets.NewString("everyone", "not-aws", "not-multitenant"),
 		},
 		{
@@ -162,7 +162,7 @@ func TestDecodeProvider(t *testing.T) {
 			discoveredPlatform: gcePlatform,
 			discoveredMasters:  gceMasters,
 			discoveredNetwork:  multitenantConfig,
-			expectedConfig:     `{"type":"gce","ProjectID":"openshift-gce-devel-ci","Region":"us-east1","Zone":"us-east1-a","NumNodes":3,"MultiMaster":true,"MultiZone":true,"Zones":["us-east1-a","us-east1-b","us-east1-c"],"ConfigFile":"","NetworkPluginIDs":["OpenShiftSDN","OpenShiftSDN/Multitenant"]}`,
+			expectedConfig:     `{"type":"gce","ProjectID":"openshift-gce-devel-ci","Region":"us-east1","Zone":"us-east1-a","NumNodes":3,"MultiMaster":true,"MultiZone":true,"Zones":["us-east1-a","us-east1-b","us-east1-c"],"ConfigFile":"","NetworkPlugin":"OpenShiftSDN","NetworkPluginMode":"Multitenant"}`,
 			runTests:           sets.NewString("everyone", "not-aws"),
 		},
 		{
@@ -171,7 +171,7 @@ func TestDecodeProvider(t *testing.T) {
 			discoveredPlatform: noPlatform,
 			discoveredMasters:  simpleMasters,
 			discoveredNetwork:  sdnConfig,
-			expectedConfig:     `{"type":"skeleton","ProjectID":"","Region":"","Zone":"","NumNodes":3,"MultiMaster":true,"MultiZone":false,"Zones":[],"ConfigFile":"","NetworkPluginIDs":["OpenShiftSDN"]}`,
+			expectedConfig:     `{"type":"skeleton","ProjectID":"","Region":"","Zone":"","NumNodes":3,"MultiMaster":true,"MultiZone":false,"Zones":[],"ConfigFile":"","NetworkPlugin":"OpenShiftSDN"}`,
 			runTests:           sets.NewString("everyone", "not-gce", "not-aws", "not-multitenant"),
 		},
 		{
@@ -181,7 +181,7 @@ func TestDecodeProvider(t *testing.T) {
 			discoveredMasters:  simpleMasters,
 			discoveredNetwork:  sdnConfig,
 			// NB: It does not actually use the passed-in Provider value
-			expectedConfig: `{"type":"skeleton","ProjectID":"","Region":"","Zone":"","NumNodes":3,"MultiMaster":true,"MultiZone":false,"Zones":[],"ConfigFile":"","NetworkPluginIDs":["OpenShiftSDN"]}`,
+			expectedConfig: `{"type":"skeleton","ProjectID":"","Region":"","Zone":"","NumNodes":3,"MultiMaster":true,"MultiZone":false,"Zones":[],"ConfigFile":"","NetworkPlugin":"OpenShiftSDN"}`,
 			runTests:       sets.NewString("everyone", "not-gce", "not-aws", "not-multitenant"),
 		},
 		{
@@ -190,7 +190,7 @@ func TestDecodeProvider(t *testing.T) {
 			discoveredPlatform: noPlatform,
 			discoveredMasters:  simpleMasters,
 			discoveredNetwork:  sdnConfig,
-			expectedConfig:     `{"type":"openstack","ProjectID":"","Region":"","Zone":"","NumNodes":3,"MultiMaster":true,"MultiZone":false,"Zones":[],"ConfigFile":"","NetworkPluginIDs":["OpenShiftSDN"]}`,
+			expectedConfig:     `{"type":"openstack","ProjectID":"","Region":"","Zone":"","NumNodes":3,"MultiMaster":true,"MultiZone":false,"Zones":[],"ConfigFile":"","NetworkPlugin":"OpenShiftSDN"}`,
 			runTests:           sets.NewString("everyone", "not-gce", "not-aws", "not-multitenant"),
 		},
 		{
@@ -199,23 +199,23 @@ func TestDecodeProvider(t *testing.T) {
 			discoveredPlatform: awsPlatform,
 			discoveredMasters:  simpleMasters,
 			discoveredNetwork:  ovnKubernetesConfig,
-			expectedConfig:     `{"type":"aws","ProjectID":"","Region":"us-east-2","Zone":"us-east-2a","NumNodes":3,"MultiMaster":false,"MultiZone":true,"Zones":[],"ConfigFile":"","NetworkPluginIDs":["OVNKubernetes"]}`,
+			expectedConfig:     `{"type":"aws","ProjectID":"","Region":"us-east-2","Zone":"us-east-2a","NumNodes":3,"MultiMaster":false,"MultiZone":true,"Zones":[],"ConfigFile":"","NetworkPlugin":"OVNKubernetes"}`,
 			runTests:           sets.NewString("everyone", "not-gce", "not-sdn", "not-multitenant"),
 		},
 		{
 			name:               "complex override without discovery",
 			provider:           `{"type":"aws","region":"us-east-2","zone":"us-east-2a","multimaster":false,"multizone":true}`,
 			discoveredPlatform: nil,
-			expectedConfig:     `{"type":"aws","ProjectID":"","Region":"us-east-2","Zone":"us-east-2a","NumNodes":0,"MultiMaster":false,"MultiZone":true,"Zones":null,"ConfigFile":"","NetworkPluginIDs":null}`,
+			expectedConfig:     `{"type":"aws","ProjectID":"","Region":"us-east-2","Zone":"us-east-2a","NumNodes":0,"MultiMaster":false,"MultiZone":true,"Zones":null,"ConfigFile":"","NetworkPlugin":""}`,
 			runTests:           sets.NewString("everyone", "not-gce", "not-sdn", "not-multitenant"),
 		},
 		{
 			name:               "override network plugin",
-			provider:           `{"type":"aws","networkPluginIDs":["Calico"]}`,
+			provider:           `{"type":"aws","networkPlugin":"Calico"}`,
 			discoveredPlatform: awsPlatform,
 			discoveredMasters:  simpleMasters,
 			discoveredNetwork:  ovnKubernetesConfig,
-			expectedConfig:     `{"type":"aws","ProjectID":"","Region":"us-east-2","Zone":"","NumNodes":3,"MultiMaster":true,"MultiZone":false,"Zones":[],"ConfigFile":"","NetworkPluginIDs":["Calico"]}`,
+			expectedConfig:     `{"type":"aws","ProjectID":"","Region":"us-east-2","Zone":"","NumNodes":3,"MultiMaster":true,"MultiZone":false,"Zones":[],"ConfigFile":"","NetworkPlugin":"Calico"}`,
 			runTests:           sets.NewString("everyone", "not-gce", "not-sdn", "not-multitenant"),
 		},
 	}
