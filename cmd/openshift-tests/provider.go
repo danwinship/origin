@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"strings"
 
 	"github.com/onsi/ginkgo"
 	"github.com/onsi/gomega"
@@ -25,8 +24,6 @@ import (
 	_ "k8s.io/kubernetes/test/e2e"
 	_ "k8s.io/kubernetes/test/e2e/lifecycle"
 )
-
-type TestNameMatchesFunc func(name string) bool
 
 func initializeTestFramework(context *e2e.TestContextType, config *exutilcluster.ClusterConfiguration, dryRun bool) error {
 	// update context with loaded config
@@ -62,25 +59,6 @@ func initializeTestFramework(context *e2e.TestContextType, config *exutilcluster
 	e2e.AfterReadingAllFlags(context)
 	context.DumpLogsOnFailure = true
 	return nil
-}
-
-func getProviderMatchFn(config *exutilcluster.ClusterConfiguration) TestNameMatchesFunc {
-	// given the configuration we have loaded, skip tests that our provider should exclude
-	// or our network plugin should exclude
-	var skips []string
-	skips = append(skips, fmt.Sprintf("[Skipped:%s]", config.ProviderName))
-	for _, id := range config.NetworkPluginIDs {
-		skips = append(skips, fmt.Sprintf("[Skipped:Network/%s]", id))
-	}
-	matchFn := func(name string) bool {
-		for _, skip := range skips {
-			if strings.Contains(name, skip) {
-				return false
-			}
-		}
-		return true
-	}
-	return matchFn
 }
 
 func decodeProvider(provider string, dryRun, discover bool) (*exutilcluster.ClusterConfiguration, error) {
