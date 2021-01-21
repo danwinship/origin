@@ -100,11 +100,7 @@ func decodeProvider(provider string, dryRun, discover bool) (*exutilcloud.Cluste
 		fallthrough
 
 	case "azure", "aws", "gce", "vsphere":
-		clientConfig, err := e2e.LoadConfig(true)
-		if err != nil {
-			return nil, err
-		}
-		config, err := exutilcloud.LoadConfig(clientConfig)
+		config, err := exutilcloud.DiscoverConfig()
 		if err != nil {
 			return nil, err
 		}
@@ -130,9 +126,7 @@ func decodeProvider(provider string, dryRun, discover bool) (*exutilcloud.Cluste
 		// object that can be overriden
 		var config *exutilcloud.ClusterConfiguration
 		if discover {
-			if clientConfig, err := e2e.LoadConfig(true); err == nil {
-				config, _ = exutilcloud.LoadConfig(clientConfig)
-			}
+			config, _ = exutilcloud.DiscoverConfig()
 		}
 		if config == nil {
 			config = &exutilcloud.ClusterConfiguration{
