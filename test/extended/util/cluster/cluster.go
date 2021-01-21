@@ -102,12 +102,6 @@ func DiscoverConfig() (*ClusterConfiguration, error) {
 		networkPluginIDs = append(networkPluginIDs, string(networkSpec.DefaultNetwork.Type)+"/"+string(networkSpec.DefaultNetwork.OpenShiftSDNConfig.Mode))
 	}
 
-	if p.Type == configv1.NonePlatformType {
-		return &ClusterConfiguration{
-			NetworkPluginIDs: networkPluginIDs,
-		}, nil
-	}
-
 	zones := sets.NewString()
 	for _, node := range masters.Items {
 		zones.Insert(node.Labels["failure-domain.beta.kubernetes.io/zone"])

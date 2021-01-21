@@ -171,7 +171,7 @@ func TestDecodeProvider(t *testing.T) {
 			discoveredPlatform: noPlatform,
 			discoveredMasters:  simpleMasters,
 			discoveredNetwork:  sdnConfig,
-			expectedConfig:     `{"type":"skeleton","ProjectID":"","Region":"","Zone":"","NumNodes":0,"MultiMaster":false,"MultiZone":false,"Zones":null,"ConfigFile":"","NetworkPluginIDs":["OpenShiftSDN"]}`,
+			expectedConfig:     `{"type":"skeleton","ProjectID":"","Region":"","Zone":"","NumNodes":3,"MultiMaster":true,"MultiZone":false,"Zones":[],"ConfigFile":"","NetworkPluginIDs":["OpenShiftSDN"]}`,
 			runTests:           sets.NewString("everyone", "not-gce", "not-aws", "not-multitenant"),
 		},
 		{
@@ -190,7 +190,7 @@ func TestDecodeProvider(t *testing.T) {
 			discoveredPlatform: noPlatform,
 			discoveredMasters:  simpleMasters,
 			discoveredNetwork:  sdnConfig,
-			expectedConfig:     `{"type":"openstack","ProjectID":"","Region":"","Zone":"","NumNodes":0,"MultiMaster":false,"MultiZone":false,"Zones":null,"ConfigFile":"","NetworkPluginIDs":["OpenShiftSDN"]}`,
+			expectedConfig:     `{"type":"openstack","ProjectID":"","Region":"","Zone":"","NumNodes":3,"MultiMaster":true,"MultiZone":false,"Zones":[],"ConfigFile":"","NetworkPluginIDs":["OpenShiftSDN"]}`,
 			runTests:           sets.NewString("everyone", "not-gce", "not-aws", "not-multitenant"),
 		},
 		{
