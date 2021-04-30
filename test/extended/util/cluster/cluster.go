@@ -225,9 +225,11 @@ func (c *ClusterConfiguration) MatchFn() func(string) bool {
 	matchFn := func(name string) bool {
 		for _, skip := range skips {
 			if strings.Contains(name, skip) {
+				fmt.Printf("SKIPPING %s due to %s\n", name, skip)
 				return false
 			}
 		}
+		fmt.Printf("MATCHED %s\n", name)
 		return true
 	}
 	return matchFn

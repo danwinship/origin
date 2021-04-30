@@ -128,6 +128,7 @@ func decodeProvider(provider string, dryRun, discover bool, clusterState *exutil
 		if err := json.Unmarshal([]byte(provider), config); err != nil {
 			return nil, fmt.Errorf("provider must decode into the ClusterConfig object: %v", err)
 		}
+		fmt.Printf("CONFIG IS: %#v\n", config)
 		return config, nil
 	}
 }
